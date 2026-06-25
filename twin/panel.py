@@ -46,6 +46,10 @@ class BrainReq(BaseModel):
     brain: str
 
 
+class ModelReq(BaseModel):
+    model: str
+
+
 class ListenReq(BaseModel):
     on: bool
 
@@ -111,6 +115,16 @@ def post_say(r: SayReq):
 @app.post("/api/brain")
 def post_brain(r: BrainReq):
     return {"active": hub.set_brain(r.brain)}
+
+
+@app.get("/api/models")
+def get_models():
+    return hub.list_brain_models()
+
+
+@app.post("/api/model")
+def post_model(r: ModelReq):
+    return hub.set_brain_model(r.model)
 
 
 @app.post("/api/listen")

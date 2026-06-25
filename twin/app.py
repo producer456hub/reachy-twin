@@ -15,7 +15,7 @@ def main():
     hub.start()
     print(f"[ready] brains: {', '.join(hub.brains)} | active: {hub.active}")
     print(f"[mic] noise-gate = {hub._thresh:.4f}")
-    hub.say("Hey, Claude here. Say my name or Marcus to switch. I'm listening.")
+    hub.say("Hey, Maintop here. Say Claude to switch, or my name to come back. I'm listening.")
     hub.set_listening(True)
     try:
         while hub._listening:          # mic loop exits itself on the exit words

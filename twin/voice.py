@@ -6,15 +6,15 @@ import re
 
 import numpy as np
 
-from twin.config import CLAUDE_VOICE, MARCUS_VOICE
-from twin.brains import make_claude, MarcusBrain
+from twin.config import CLAUDE_VOICE, LOCAL_VOICE
+from twin.brains import make_claude, make_local
 
 SR = 16000
 SILENCE_HANG = 80         # ~0.8 s trailing silence ends an utterance
 SPEECH_START = 3          # consecutive loud chunks to trigger
 MIN_CHUNKS = 30           # ignore blips shorter than ~0.3 s
 EXIT_WORDS = ("goodbye", "good bye", "shut down", "go to sleep")
-WAKE = {"marcus": re.compile(r"\bmarcus\b", re.I), "claude": re.compile(r"\bclaude\b", re.I)}
+WAKE = {"maintop": re.compile(r"\bmaintop\b", re.I), "claude": re.compile(r"\bclaude\b", re.I)}
 
 
 def _rms(x):
@@ -46,17 +46,18 @@ def detect_switch(text, current):
 
 def strip_wake(text):
     """Drop a leading 'hey <name>,' / '<name>,' so the brain doesn't hear its own name."""
-    t = re.sub(r"^\s*(hey|hi|ok|okay)?\s*(marcus|claude)[\s,.:!-]*", "", text, count=1, flags=re.I)
+    t = re.sub(r"^\s*(hey|hi|ok|okay)?\s*(maintop|claude)[\s,.:!-]*", "", text, count=1, flags=re.I)
     return t.strip()
 
 
 def build_brains():
+    """Maintop (local Ollama, the default) + Claude (subscription CLI, optional).
+
+    This host is a self-contained entity: NO Marcus, nothing reaches vr-2/the tailnet.
+    """
     brains, voices = {}, {}
+    brains["maintop"] = make_local()
+    voices["maintop"] = LOCAL_VOICE
     brains["claude"] = make_claude()
     voices["claude"] = CLAUDE_VOICE
-    try:
-        brains["marcus"] = MarcusBrain()
-        voices["marcus"] = MARCUS_VOICE
-    except Exception as e:
-        print(f"[warn] Marcus unavailable ({e}) -- Claude only")
     return brains, voices

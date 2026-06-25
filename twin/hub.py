@@ -51,7 +51,7 @@ class RobotHub:
         self.stt = STT()
         self.tts = KokoroTTS()
         self.brains, self.voices = build_brains()
-        self.active = "claude"
+        self.active = "maintop"          # this host's own local brain is the default
         self.mini = None
         self.last_error = None     # last robot-connect failure (shown in /api/state)
         self._lock = threading.Lock()          # serializes SERVO/motion + camera access
@@ -470,6 +470,20 @@ class RobotHub:
         if brain in self.brains:
             self.active = brain
         return self.active
+
+    # ---------- Maintop model switching (swap which local model he thinks with) ----------
+    def list_brain_models(self):
+        b = self.brains.get("maintop")
+        models = b.list_models() if hasattr(b, "list_models") else []
+        return {"models": models, "active": getattr(b, "model", None)}
+
+    def set_brain_model(self, model):
+        b = self.brains.get("maintop")
+        if not hasattr(b, "set_model"):
+            return {"error": "local brain unavailable"}
+        active = b.set_model(model)
+        self._log("system", f"Maintop model -> {active}")
+        return {"active": active}
 
     # ---------- listening ----------
     def set_listening(self, on):

@@ -14,7 +14,7 @@ import subprocess
 import urllib.request
 import uuid
 
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MARCUS_URL
+from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MARCUS_URL, OLLAMA_URL, OLLAMA_MODEL
 
 
 def looks_like_tool_call(t: str) -> bool:
@@ -111,7 +111,7 @@ class _ChatBrain:
 
 class ClaudeBrain(_ChatBrain):
     name = "Claude"
-    other = "Marcus"
+    other = "Maintop"
 
     def __init__(self):
         super().__init__()
@@ -143,7 +143,7 @@ class ClaudeCLIBrain(_ChatBrain):
     ever fails (e.g. the session expired server-side).
     """
     name = "Claude"
-    other = "Marcus"
+    other = "Maintop"
 
     def __init__(self, model: str = ""):
         super().__init__()
@@ -186,6 +186,72 @@ class ClaudeCLIBrain(_ChatBrain):
             reply = "Hmm, I blanked for a second. Say that again?"
         self._remember("assistant", reply)
         return reply
+
+
+class OllamaBrain(_ChatBrain):
+    """Maintop: this host's own fully-local brain -- an Ollama model on the GPU.
+
+    Talks only to localhost:11434. Nothing leaves the machine -- prompts, history,
+    and replies stay here. This is the default brain so the robot never depends on
+    the network (or on Marcus / the reachy on vr-2) to hold a conversation.
+
+    The underlying model is hot-swappable at runtime: list_models() shows what's
+    installed in Ollama, set_model() swaps which one Maintop thinks with.
+    """
+    name = "Maintop"
+    other = "Claude"
+
+    def __init__(self, url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
+        super().__init__()
+        self.url = (url or "").rstrip("/")
+        self.model = model
+        self.endpoint = self.url + "/api/chat"
+
+    def list_models(self):
+        """Names of the models installed in Ollama (for the model picker)."""
+        try:
+            with urllib.request.urlopen(self.url + "/api/tags", timeout=5) as resp:
+                tags = json.loads(resp.read()).get("models", [])
+            names = sorted(m["name"] for m in tags if m.get("name"))
+            return names or [self.model]
+        except Exception:
+            return [self.model]
+
+    def set_model(self, model: str) -> str:
+        """Swap which model Maintop thinks with. Same persona, so history is kept."""
+        if model:
+            self.model = model
+        return self.model
+
+    def reply(self, user_text: str) -> str:
+        self._remember("user", user_text)
+        system = SYSTEM_TMPL.format(name=self.name, other=self.other, actions=get_actions_hint())
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}] + self.history,
+            "stream": False,
+            "keep_alive": "30m",            # keep the weights warm in VRAM between turns
+            "options": {"temperature": 0.7, "num_predict": 200},
+        }
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            self.endpoint, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                obj = json.loads(resp.read())
+            text = (obj.get("message", {}).get("content") or "").strip()
+        except Exception as e:
+            text = f"My local brain stalled for a second there: {e}"
+        text = text or "Hm, I drew a blank. Try me again?"
+        self._remember("assistant", text)
+        return text
+
+
+def make_local():
+    """Maintop -- the fully-local Ollama brain."""
+    return OllamaBrain()
 
 
 def make_claude():

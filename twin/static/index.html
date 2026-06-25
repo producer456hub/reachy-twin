@@ -102,9 +102,10 @@
     <div class="grp">
       <label>Brain</label>
       <div class="row">
-        <button id="bClaude" class="sel claude" onclick="setBrain('claude')">Claude</button>
-        <button id="bMarcus" onclick="setBrain('marcus')">Marcus</button>
+        <button id="bMaintop" class="sel marcus" onclick="setBrain('maintop')">Maintop</button>
+        <button id="bClaude" onclick="setBrain('claude')">Claude</button>
       </div>
+      <div class="row"><select id="modelSel" title="Maintop model (local)" onchange="setModel(this.value)"></select></div>
     </div>
     <div class="grp">
       <label>Microphone (ears)</label>
@@ -197,8 +198,24 @@ function renderLog(log){
 }
 function setActiveBadge(b){
   const el=$('activeBadge'); el.textContent=b; el.className='badge '+b;
+  $('bMaintop').className=(b==='maintop'?'sel marcus':'');
   $('bClaude').className=(b==='claude'?'sel claude':'');
-  $('bMarcus').className=(b==='marcus'?'sel marcus':'');
+}
+let _modelsLoaded=false;
+async function loadModels(){
+  try{
+    const m=await api('/api/models');
+    const sel=$('modelSel'); sel.innerHTML='';
+    (m.models||[]).forEach(name=>{
+      const o=document.createElement('option');
+      o.value=name; o.textContent=name; if(name===m.active)o.selected=true;
+      sel.appendChild(o);
+    });
+    _modelsLoaded=true;
+  }catch(e){}
+}
+async function setModel(name){
+  try{ await api('/api/model',{model:name}); }catch(e){}
 }
 async function refresh(){
   try{
@@ -276,7 +293,7 @@ async function pollServos(){
     }).join('');
   }catch(e){}
 }
-setInterval(refresh,1500); refresh(); loadMoves();
+setInterval(refresh,1500); refresh(); loadMoves(); loadModels();
 </script>
 </body>
 </html>

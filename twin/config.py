@@ -20,10 +20,16 @@ CLAUDE_VOICE = os.getenv("CLAUDE_VOICE", "am_michael")   # neutral male
 MARCUS_VOICE = os.getenv("MARCUS_VOICE", "af_heart")     # warm female ("heart")
 
 # STT
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en")
-WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small.en")
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "auto")    # auto -> cuda if available, else cpu
+WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "auto")  # auto -> float16 on cuda, int8 on cpu
 
 # Brains
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
 MARCUS_URL = os.getenv("MARCUS_URL", "")  # e.g. http://vr-2:PORT  (set per host)
+
+# Local LLM brain (Ollama) -- offline default, runs on this host's GPU.
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+LOCAL_VOICE = os.getenv("LOCAL_VOICE", "af_heart")

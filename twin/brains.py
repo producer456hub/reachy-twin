@@ -14,7 +14,8 @@ import subprocess
 import urllib.request
 import uuid
 
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MARCUS_URL, OLLAMA_URL, OLLAMA_MODEL
+from .config import (ANTHROPIC_API_KEY, CLAUDE_MODEL, MARCUS_URL,
+                     OLLAMA_URL, OLLAMA_MODEL, LEMONADE_URL)
 
 
 def looks_like_tool_call(t: str) -> bool:
@@ -188,70 +189,104 @@ class ClaudeCLIBrain(_ChatBrain):
         return reply
 
 
-class OllamaBrain(_ChatBrain):
-    """Maintop: this host's own fully-local brain -- an Ollama model on the GPU.
+class LocalBrain(_ChatBrain):
+    """Maintop: this host's own fully-local brain. Nothing leaves the machine.
 
-    Talks only to localhost:11434. Nothing leaves the machine -- prompts, history,
-    and replies stay here. This is the default brain so the robot never depends on
-    the network (or on Marcus / the reachy on vr-2) to hold a conversation.
-
-    The underlying model is hot-swappable at runtime: list_models() shows what's
-    installed in Ollama, set_model() swaps which one Maintop thinks with.
+    Two backends, both localhost-only -- Maintop can think on the GPU (Ollama,
+    11434) or the NPU (Lemonade / AMD Ryzen AI, OpenAI-compatible on 8020). The
+    model is hot-swappable at runtime: list_models() returns everything installed
+    across BOTH backends; set_model() swaps which one Maintop thinks with, and
+    reply() routes to whichever engine owns that model. So picking an NPU model in
+    the panel simply runs the next turn on the NPU instead of the GPU.
     """
     name = "Maintop"
     other = "Claude"
 
-    def __init__(self, url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
+    def __init__(self, ollama_url: str = OLLAMA_URL, lemonade_url: str = LEMONADE_URL,
+                 model: str = OLLAMA_MODEL):
         super().__init__()
-        self.url = (url or "").rstrip("/")
+        self.ollama_url = (ollama_url or "").rstrip("/")
+        self.lemonade_url = (lemonade_url or "").rstrip("/")
         self.model = model
-        self.endpoint = self.url + "/api/chat"
+        self._backend = {}            # model name -> "gpu" | "npu"
 
     def list_models(self):
-        """Names of the models installed in Ollama (for the model picker)."""
-        try:
-            with urllib.request.urlopen(self.url + "/api/tags", timeout=5) as resp:
-                tags = json.loads(resp.read()).get("models", [])
-            names = sorted(m["name"] for m in tags if m.get("name"))
-            return names or [self.model]
+        """Models installed across both backends (GPU via Ollama, NPU via Lemonade).
+        Each is recorded in self._backend so reply() knows where to route it."""
+        names, self._backend = [], {}
+        try:                                            # GPU (Ollama)
+            with urllib.request.urlopen(self.ollama_url + "/api/tags", timeout=5) as r:
+                for m in json.loads(r.read()).get("models", []):
+                    if m.get("name"):
+                        names.append(m["name"]); self._backend[m["name"]] = "gpu"
         except Exception:
-            return [self.model]
+            pass
+        try:                                            # NPU (Lemonade) -- if running
+            with urllib.request.urlopen(self.lemonade_url + "/api/v1/models", timeout=5) as r:
+                for m in json.loads(r.read()).get("data", []):
+                    if m.get("id"):
+                        names.append(m["id"]); self._backend[m["id"]] = "npu"
+        except Exception:
+            pass
+        self._backend.setdefault(self.model, "gpu")
+        return names or [self.model]
 
     def set_model(self, model: str) -> str:
-        """Swap which model Maintop thinks with. Same persona, so history is kept."""
+        """Swap which model/engine Maintop thinks with. Same persona, history kept."""
         if model:
             self.model = model
+            if model not in self._backend:
+                self.list_models()                      # learn its backend
         return self.model
+
+    def _backend_of(self, model):
+        if model not in self._backend:
+            self.list_models()
+        return self._backend.get(model, "gpu")
 
     def reply(self, user_text: str) -> str:
         self._remember("user", user_text)
         system = SYSTEM_TMPL.format(name=self.name, other=self.other, actions=get_actions_hint())
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "system", "content": system}] + self.history,
-            "stream": False,
-            "keep_alive": "30m",            # keep the weights warm in VRAM between turns
-            "options": {"temperature": 0.7, "num_predict": 200},
-        }
-        body = json.dumps(payload).encode()
-        req = urllib.request.Request(
-            self.endpoint, data=body,
-            headers={"Content-Type": "application/json"}, method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                obj = json.loads(resp.read())
-            text = (obj.get("message", {}).get("content") or "").strip()
-        except Exception as e:
-            text = f"My local brain stalled for a second there: {e}"
+        msgs = [{"role": "system", "content": system}] + self.history
+        if self._backend_of(self.model) == "npu":
+            text = self._lemonade_reply(msgs)
+        else:
+            text = self._ollama_reply(msgs)
         text = text or "Hm, I drew a blank. Try me again?"
         self._remember("assistant", text)
         return text
 
+    def _post_json(self, url, payload):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+
+    def _ollama_reply(self, msgs):
+        try:
+            obj = self._post_json(self.ollama_url + "/api/chat", {
+                "model": self.model, "messages": msgs, "stream": False,
+                "keep_alive": "30m", "options": {"temperature": 0.7, "num_predict": 200}})
+            return (obj.get("message", {}).get("content") or "").strip()
+        except Exception as e:
+            return f"My GPU brain stalled for a second there: {e}"
+
+    def _lemonade_reply(self, msgs):
+        try:
+            obj = self._post_json(self.lemonade_url + "/api/v1/chat/completions", {
+                "model": self.model, "messages": msgs, "stream": False,
+                "temperature": 0.7, "max_tokens": 200})
+            return (obj["choices"][0]["message"]["content"] or "").strip()
+        except Exception as e:
+            return f"My NPU brain stalled for a second there: {e}"
+
+
+OllamaBrain = LocalBrain        # back-compat alias
+
 
 def make_local():
-    """Maintop -- the fully-local Ollama brain."""
-    return OllamaBrain()
+    """Maintop -- the fully-local dual-backend (GPU + NPU) brain."""
+    return LocalBrain()
 
 
 def make_claude():

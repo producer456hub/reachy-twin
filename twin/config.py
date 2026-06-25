@@ -29,7 +29,9 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
 MARCUS_URL = os.getenv("MARCUS_URL", "")  # e.g. http://vr-2:PORT  (set per host)
 
-# Local LLM brain (Ollama) -- offline default, runs on this host's GPU.
+# Local LLM brain -- offline, this host only. Two backends Maintop can think on:
+#   GPU via Ollama (default)         and   NPU via Lemonade (AMD Ryzen AI).
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+LEMONADE_URL = os.getenv("LEMONADE_URL", "http://localhost:8020")   # NPU (OpenAI-compatible)
 LOCAL_VOICE = os.getenv("LOCAL_VOICE", "af_heart")

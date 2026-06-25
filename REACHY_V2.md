@@ -162,5 +162,25 @@ here on the laptop; **motion/camera work** lands on the Mac host (which is also
 6. **Motion arbiter** — the real redesign; do last, on the Mac host with the robot, because it needs live tuning.
 
 Items 2–4 need no robot and run entirely on this machine.
-</content>
-</invoke>
+
+---
+
+## Backlog — open items (added 2026-06-24)
+
+> These belong in the app's canonical `BACKLOG.md` (which lives on the Mac host, not on
+> this behind-master branch). Fold them in when this branch merges.
+
+1. **Reconcile `maintop-local-brain` onto the Mac host.** The Mac `master`
+   (`davids-MacBook-Pro:/Users/admin/reachy-twin`) is ~13 commits ahead AND has uncommitted
+   changes to `config.py`, `hub.py`, `panel.py`, `static/index.html`, `tts.py` — the same
+   files Maintop rewrites. Safe sequence: (a) commit the Mac's WIP first so nothing unsaved
+   is at risk; (b) `git fetch origin && git merge origin/maintop-local-brain`; (c) resolve
+   conflicts by hand (Maintop's local-brain/NPU work vs the Mac's wave/dog-mode/lock-split).
+   The branch is on GitHub as `origin/maintop-local-brain`. Do it with eyes on the Mac, not blind.
+2. **Lemonade/NPU is laptop-only** — the Mac has no AMD NPU. The dual-backend brain degrades
+   to Ollama-only there automatically (no setup needed).
+3. **`clean_for_speech` doesn't strip emoji.** Small local models (esp. `heretic-qwen3-4b`)
+   emit emoji despite the "no emoji" prompt — harmless for TTS, but strip them for tidy logs.
+4. **Lemonade autostart (laptop)** is a logon scheduled task "Lemonade NPU Server (Maintop)";
+   if the robot ever runs on the laptop, confirm it's up before connecting.
+

@@ -68,6 +68,16 @@
   .bh{width:100%;text-align:left}
   .bh.on{background:var(--ok);color:#022;border-color:var(--ok)}
   .bh:disabled{opacity:.4;cursor:not-allowed}
+  .meter{margin-top:10px}
+  .meterhead{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px}
+  .meterhead.small{font-size:11px;color:var(--dim);margin-top:6px}
+  .meterhead b{color:var(--dim);font-weight:500;font-size:11px}
+  .bar{height:8px;background:#0e1120;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--claude));transition:width .4s}
+  .bar.vram i{background:linear-gradient(90deg,#5a6cff,var(--marcus))}
+  .npustate{font-weight:600;color:var(--dim)}
+  .npustate.active{color:var(--ok)}
+  .npustate .dot{margin-right:6px}
   footer{display:flex;gap:10px;padding:12px 18px;border-top:1px solid var(--line);background:var(--panel);
          padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   #text{flex:1;background:#0e1120;border:1px solid var(--line);color:var(--txt);border-radius:10px;
@@ -106,6 +116,19 @@
         <button id="bClaude" onclick="setBrain('claude')">Claude</button>
       </div>
       <div class="row"><select id="modelSel" title="Maintop model (local)" onchange="setModel(this.value)"></select></div>
+    </div>
+    <div class="grp" id="computeGrp" style="display:none">
+      <label>Compute</label>
+      <div class="meter" id="gpuMeter">
+        <div class="meterhead"><span>GPU <b id="gpuName"></b></span><span id="gpuPct">—</span></div>
+        <div class="bar"><i id="gpuBar"></i></div>
+        <div class="meterhead small"><span>VRAM</span><span id="gpuVram">—</span></div>
+        <div class="bar vram"><i id="gpuVramBar"></i></div>
+      </div>
+      <div class="meter" id="npuMeter">
+        <div class="meterhead"><span>NPU</span><span id="npuState" class="npustate"><span class="dot"></span>—</span></div>
+        <div class="meterhead small"><span id="npuModel"></span></div>
+      </div>
     </div>
     <div class="grp">
       <label>Microphone (ears)</label>
@@ -293,7 +316,31 @@ async function pollServos(){
     }).join('');
   }catch(e){}
 }
+async function pollDevices(){
+  try{
+    const d=await api('/api/devices'); const g=d.gpu||{}, n=d.npu||{};
+    if(!g.available && !n.available){ $('computeGrp').style.display='none'; return; }
+    $('computeGrp').style.display='block';
+    const gm=$('gpuMeter');
+    if(g.available){
+      gm.style.display='';
+      $('gpuName').textContent=(g.name||'').replace('NVIDIA GeForce ','');
+      $('gpuPct').textContent=g.util+'%'; $('gpuBar').style.width=g.util+'%';
+      const vp=g.mem_total?Math.round(g.mem_used/g.mem_total*100):0;
+      $('gpuVram').textContent=(g.mem_used/1024).toFixed(1)+' / '+(g.mem_total/1024).toFixed(1)+' GB';
+      $('gpuVramBar').style.width=vp+'%';
+    } else gm.style.display='none';
+    const nm=$('npuMeter');
+    if(n.available){
+      nm.style.display='';
+      const st=$('npuState'); st.className='npustate'+(n.active?' active':'');
+      st.innerHTML='<span class="dot'+(n.active?' on':'')+'"></span>'+(n.active?'Active':'Idle');
+      $('npuModel').textContent=n.active&&n.model?n.model:'';
+    } else nm.style.display='none';
+  }catch(e){}
+}
 setInterval(refresh,1500); refresh(); loadMoves(); loadModels();
+setInterval(pollDevices,2000); pollDevices();
 </script>
 </body>
 </html>

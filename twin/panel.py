@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from twin.hub import RobotHub
+from twin.devices import gpu_stats, npu_stats
+from twin.config import LEMONADE_URL
 
 STATIC = Path(__file__).parent / "static"
 hub = RobotHub()
@@ -120,6 +122,12 @@ def post_brain(r: BrainReq):
 @app.get("/api/models")
 def get_models():
     return hub.list_brain_models()
+
+
+@app.get("/api/devices")
+def get_devices():
+    """Live compute telemetry for the panel meters: GPU (nvidia-smi) + NPU (Lemonade)."""
+    return {"gpu": gpu_stats(), "npu": npu_stats(LEMONADE_URL)}
 
 
 @app.post("/api/model")

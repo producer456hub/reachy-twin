@@ -98,6 +98,11 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+@app.get("/favicon.png")
+def favicon():
+    return FileResponse(STATIC / "favicon.png")
+
+
 @app.get("/api/state")
 def get_state():
     return hub.state()

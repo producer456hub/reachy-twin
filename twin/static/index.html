@@ -194,7 +194,7 @@
   <button id="send" onclick="send()">Send</button>
 </footer>
 <script>
-let dragging=false, lastLogLen=-1;
+let dragging=false, lastLogSig='';
 const $=id=>document.getElementById(id);
 $('volSlider').addEventListener('pointerdown',()=>dragging=true);
 $('volSlider').addEventListener('pointerup',()=>dragging=false);
@@ -206,7 +206,11 @@ async function api(path,body){
   return (await fetch(path,o)).json();
 }
 function renderLog(log){
-  if(log.length===lastLogLen) return; lastLogLen=log.length;
+  // The server only sends the last ~40 entries, so log.length stops changing once
+  // the chat is long. Detect new messages by the last entry's timestamp instead,
+  // or the live view silently stops updating while the backend keeps replying.
+  const sig=log.length+':'+(log.length?log[log.length-1].t:0);
+  if(sig===lastLogSig) return; lastLogSig=sig;
   const el=$('log');
   // only follow the tail if the user was already at the bottom -- a forced scroll
   // mid-read (or while using the side menu) yanks the view back to the chat
